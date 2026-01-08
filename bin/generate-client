@@ -1,0 +1,12 @@
+#!/usr/bin/env php
+<?php
+
+$files = array_filter([__DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'], 'file_exists');
+if (!$files) {
+    throw new \RuntimeException('vendor/autoload.php could not be found. Did you run `php composer.phar install`?');
+}
+require_once reset($files);
+
+foreach (\ryunosuke\Aws\Helper\ClientGenerator::generate() as $log) {
+    echo $log, "\n";
+}

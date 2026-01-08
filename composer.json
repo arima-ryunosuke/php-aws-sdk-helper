@@ -30,9 +30,12 @@
       "ryunosuke\\Test\\": "tests/Test"
     }
   },
+  "bin": [
+    "bin/generate-client"
+  ],
   "scripts": {
     "generate": [
-      "php bin/generate"
+      "php bin/generate-client"
     ]
   }
 }
