@@ -1,2 +1,3 @@
+/src/Aws/Client/
 /vendor
 /tests/phpunit.xml

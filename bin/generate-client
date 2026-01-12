@@ -7,6 +7,6 @@ if (!$files) {
 }
 require_once reset($files);
 
-foreach (\ryunosuke\Aws\Helper\ClientGenerator::generate() as $log) {
+foreach (\ryunosuke\Aws\Helper\ClientGenerator::generate(array_slice($argv, 1)) as $log) {
     echo $log, "\n";
 }

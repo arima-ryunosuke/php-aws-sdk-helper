@@ -7,7 +7,7 @@ use const JSON_UNESCAPED_UNICODE;
 
 class ClientGenerator
 {
-    public static function generate(): Generator
+    public static function generate(array $services = []): Generator
     {
         $V = fn($v) => $v;
 
@@ -20,6 +20,15 @@ class ClientGenerator
         $manifests = require $manifestFile = realpath("$dataDirectory/manifest.json.php");
         yield "load $manifestFile";
         foreach ($manifests as $id => $manifest) {
+            $matches = !$services;
+            foreach ($services as $service) {
+                if (fnmatch($service, $manifest['namespace'], FNM_CASEFOLD)) {
+                    $matches = true;
+                }
+            }
+            if (!$matches) {
+                continue;
+            }
             $version = $manifest['versions']['latest'];
             $schema  = require $api2File = realpath("$dataDirectory/$id/$version/api-2.json.php");
             yield "load $api2File";
