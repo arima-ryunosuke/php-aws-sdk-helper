@@ -108,7 +108,7 @@ class ClientGenerator
             "blob"            => $enum ?? "string|resource|\\Psr\\Http\\Message\\StreamInterface",
             "timestamp"       => $enum ?? "int|string|\\DateTimeInterface",
             "map"             => $enum ?? "array<{$V(self::resolveShape($schema, $schema['shapes'][$shape['key']['shape']], $key, $history))}, {$V(self::resolveShape($schema, $schema['shapes'][$shape['value']['shape']], $key, $history))}>",
-            "list"            => $enum ?? "array<{$V(self::resolveShape($schema, $schema['shapes'][$shape['member']['shape']], $key, $history))}>",
+            "list"            => $enum ?? "array|list<{$V(self::resolveShape($schema, $schema['shapes'][$shape['member']['shape']], $key, $history))}>",
             "structure"       => $enum ?? "array{{$V(self::implodeArrayMap($shape['members'], function ($v, $k) use ($V, $history, $key, $shape, $schema) {
                 $required = in_array($k, $shape['required'] ?? [], true) ? '' : '?';
                 return "{$k}{$required}:{$V(self::resolveShape($schema, $schema['shapes'][$v['shape']], $k, array_merge($history, [$key])))}";
