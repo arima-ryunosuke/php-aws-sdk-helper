@@ -34,7 +34,7 @@ class ClientGenerator
 
                 $break = false;
                 foreach ([
-                    ''      => ['\\' . \AWS\Result::class],
+                    ''      => ['\\' . \Aws\Result::class],
                     'Async' => ['\\' . \GuzzleHttp\Promise\Promise::class],
                 ] as $suffix => [$returnClass]) {
                     $methodName = "{$V(lcfirst($operation['name']))}{$suffix}";
@@ -65,7 +65,7 @@ class ClientGenerator
 
             file_put_contents("$outputDirectory/{$manifest['namespace']}Client.php", <<<PHP
                 <?php
-                namespace AWS\\{$manifest['namespace']};
+                namespace Aws\\{$manifest['namespace']};
                 
                 class {$manifest['namespace']}Client
                 {
