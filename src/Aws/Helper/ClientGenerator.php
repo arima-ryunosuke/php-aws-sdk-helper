@@ -24,13 +24,20 @@ class ClientGenerator
             $schema  = require $api2File = realpath("$dataDirectory/$id/$version/api-2.json.php");
             yield "load $api2File";
 
-            $shapes = self::implodeArrayMap($schema['shapes'], fn($v, $k) => self::resolveShape($schema, $v, $k, []), null);
+            $shapes = self::implodeArrayMap($schema['shapes'], function ($shape, $shapeId) use ($schema) {
+                if (!in_array($shape['type'], ["map", "list", "structure"], true)) {
+                    return null;
+                }
+                $type = self::resolveShape($schema['shapes'], $shapeId);
+                return strtr(" * @psalm-type $shapeId = $type", ["\n" => "\n * "]);
+            }, null);
+            $shapes = array_filter($shapes, fn($type) => $type !== null);
 
             $methods = [];
             foreach ($schema['operations'] as $operation) {
                 $required = !!(($schema['shapes'][$operation['input']['shape'] ?? null] ?? null)['required'] ?? []);
-                $param    = $shapes[$operation['input']['shape'] ?? null] ?? null;
-                $return   = $shapes[$operation['output']['shape'] ?? null] ?? null;
+                $param    = $operation['input']['shape'] ?? null;
+                $return   = $operation['output']['shape'] ?? null;
 
                 $break = false;
                 foreach ([
@@ -67,6 +74,9 @@ class ClientGenerator
                 <?php
                 namespace Aws\\{$manifest['namespace']};
                 
+                /**
+                {$V(implode("\n", $shapes))}
+                 */
                 class {$manifest['namespace']}Client
                 {
                 {$V(implode("\n\n", $methods))}
@@ -83,13 +93,17 @@ class ClientGenerator
         }
     }
 
-    private static function resolveShape(array $schema, array $shape, $key, $history): string
+    private static function resolveShape(array $shapes, string $shapeId, int $nest = 0): ?string
     {
-        $V = fn($v) => $v;
+        $shape = $shapes[$shapeId];
 
-        if (in_array($key, $history, true)) {
-            return 'mixed';
+        if ($nest > 0 && in_array($shape['type'], ["map", "list", "structure"], true)) {
+            return $shapeId;
         }
+
+        $V       = fn($v) => $v;
+        $indent0 = str_repeat(" ", ($nest + 0) * 4);
+        $indent1 = str_repeat(" ", ($nest + 1) * 4);
 
         $enum = null;
         if ($shape['enum'] ?? []) {
@@ -107,12 +121,16 @@ class ClientGenerator
             "string"          => $enum ?? "string",
             "blob"            => $enum ?? "string|resource|\\Psr\\Http\\Message\\StreamInterface",
             "timestamp"       => $enum ?? "int|string|\\DateTimeInterface",
-            "map"             => $enum ?? "array<{$V(self::resolveShape($schema, $schema['shapes'][$shape['key']['shape']], $key, $history))}, {$V(self::resolveShape($schema, $schema['shapes'][$shape['value']['shape']], $key, $history))}>",
-            "list"            => $enum ?? "array|list<{$V(self::resolveShape($schema, $schema['shapes'][$shape['member']['shape']], $key, $history))}>",
-            "structure"       => $enum ?? "array{{$V(self::implodeArrayMap($shape['members'], function ($v, $k) use ($V, $history, $key, $shape, $schema) {
-                $required = in_array($k, $shape['required'] ?? [], true) ? '' : '?';
-                return "{$k}{$required}:{$V(self::resolveShape($schema, $schema['shapes'][$v['shape']], $k, array_merge($history, [$key])))}";
-            }, ', '))}}",
+            "map"             => $enum ?? "array<{$V(self::resolveShape($shapes, $shape['key']['shape'], $nest + 1))}, {$V(self::resolveShape($shapes, $shape['value']['shape'], $nest + 1))}>",
+            "list"            => $enum ?? "array|list<{$V(self::resolveShape($shapes, $shape['member']['shape'], $nest + 1))}>",
+            "structure"       => $enum ?? "array{{$V(self::concatStrings(
+                "\n",
+                "{$V(self::implodeArrayMap($shape['members'], function ($v, $k) use ($V, $shapes, $shape, $nest, $indent1) {
+                    $required = in_array($k, $shape['required'] ?? [], true) ? '' : '?';
+                    return "$indent1{$k}{$required}: {$V(self::resolveShape($shapes, $v['shape'], $nest + 1))},";
+                }, "\n"))}",
+                "\n{$indent0}",
+            ))}}",
         };
     }
 
@@ -122,5 +140,13 @@ class ClientGenerator
             $array[$key] = $callback($value, $key);
         }
         return $separator === null ? $array : implode($separator, $array);
+    }
+
+    private static function concatStrings(string ...$strings): string
+    {
+        if (count($strings) > count(array_filter($strings, 'strlen'))) {
+            return "";
+        }
+        return implode("", $strings);
     }
 }
