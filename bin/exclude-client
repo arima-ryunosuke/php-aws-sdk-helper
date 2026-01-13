@@ -1,0 +1,119 @@
+#!/usr/bin/env php
+<?php
+
+$verbose  = in_array('-v', $argv) || in_array('--verbose', $argv);
+$services = array_values(array_filter(array_slice($argv, 1), fn($v) => !str_starts_with($v, '-')));
+
+function buildChild(\DOMElement $parent, $xpathes)
+{
+    $xpath = new \DOMXPath($parent->ownerDocument);
+    foreach (explode('/', $xpathes) as $path) {
+        $child = $xpath->query($path, $parent)[0] ?? null;
+        if ($child === null) {
+            $attrs = [];
+            if (preg_match('#(.+?)\\[(.+)]#', $path, $m)) {
+                $path = $m[1];
+                [$name, $value] = explode('=', substr($m[2], 1));
+                $attrs[$name] = json_decode($value);
+            }
+            $child = appendChild($parent, $path, $attrs);
+        }
+        $parent = $child;
+    }
+    return $parent;
+}
+
+function appendChild(\DOMElement $parent, $tag, $attrs = [])
+{
+    $child = $parent->ownerDocument->createElement($tag);
+    foreach ($attrs as $name => $value) {
+        $child->setAttribute($name, $value);
+    }
+    return $parent->appendChild($child);
+}
+
+function removeChildren(\DOMElement $element, $attr)
+{
+    $result = [];
+    foreach (iterator_to_array($element->childNodes) as $child) {
+        if ($child instanceof \DOMElement) {
+            $result[] = $child->getAttribute($attr);
+            $element->removeChild($child);
+        }
+    }
+    return $result;
+}
+
+function each_files($dirname, $callback)
+{
+    $rdi = new \RecursiveDirectoryIterator($dirname, \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::CURRENT_AS_SELF);
+    $rii = new \RecursiveIteratorIterator($rdi);
+    $cfi = new \CallbackFilterIterator($rii, $callback);
+
+    foreach ($cfi as $it) {
+        /** @var \RecursiveDirectoryIterator $it */
+        yield $it->getRealPath() => str_replace('\\', '/', $it->getSubPathname());
+    }
+}
+
+foreach ([__DIR__ . '/../', __DIR__ . '/../../../../'] as $dir) {
+    if (file_exists("$dir/vendor/autoload.php")) {
+        $BASEDIR = realpath($dir);
+        break;
+    }
+}
+if (!isset($BASEDIR)) {
+    echo("failed to detect basedir.\n");
+    exit(1);
+}
+
+$dom                     = new \DOMDocument();
+$dom->preserveWhiteSpace = false;
+$dom->formatOutput       = true;
+
+$miscXml = "$BASEDIR/.idea/misc.xml";
+if (!file_exists($miscXml)) {
+    file_put_contents($miscXml, <<<XML
+    <?xml version="1.0" encoding="UTF-8"?>
+    <project version="4">
+      <component name="ProjectPlainTextFileTypeManager"></component>
+    </project>
+    XML,);
+}
+(function ($filename) use ($verbose, $services, $dom, $BASEDIR) {
+    $dom->load($filename);
+    $node = buildChild($dom->documentElement, 'component[@name="ProjectPlainTextFileTypeManager"]');
+
+    $targets = array_fill_keys(removeChildren($node, 'url'), true);
+    $pathes  = each_files("$BASEDIR/vendor/aws/aws-sdk-php/src", function (\RecursiveDirectoryIterator $it) use ($services) {
+        $matches = !$services;
+        foreach ($services as $service) {
+            if (fnmatch($service, $it->getSubPath(), FNM_CASEFOLD)) {
+                $matches = true;
+            }
+        }
+        if (!$matches) {
+            return false;
+        }
+        return preg_match('#([^/]+)/\1Client\.php$#', str_replace('\\', '/', $it->getSubPathname()));
+    });
+
+    $count = 0;
+    foreach ($pathes as $fullpath => $subpath) {
+        $count++;
+        $value = "file://\$PROJECT_DIR$/vendor/aws/aws-sdk-php/src/$subpath";
+        if ($verbose) {
+            echo "$fullpath was marked as text (" . (isset($targets[$value]) ? 'already' : 'added') . ").\n";
+        }
+        $targets[$value] = true;
+    }
+    if (!$verbose) {
+        echo "$count files were marked as text.\n";
+    }
+    foreach ($targets as $target => $true) {
+        appendChild($node, 'file', ['url' => $target]);
+    }
+    $dom->save($filename);
+
+    return $dom->documentElement->getAttribute('version');
+})($miscXml);

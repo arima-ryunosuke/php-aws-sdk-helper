@@ -31,11 +31,13 @@
     }
   },
   "bin": [
-    "bin/generate-client"
+    "bin/generate-client",
+    "bin/exclude-client"
   ],
   "scripts": {
     "generate": [
-      "php bin/generate-client"
+      "php bin/generate-client",
+      "php bin/exclude-client"
     ]
   }
 }
