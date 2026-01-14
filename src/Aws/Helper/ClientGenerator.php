@@ -86,7 +86,7 @@ class ClientGenerator
                 /**
                 {$V(implode("\n", $shapes))}
                  */
-                class {$manifest['namespace']}Client
+                class {$manifest['namespace']}Client extends \\Aws\\AwsClient
                 {
                 {$V(implode("\n\n", $methods))}
                 }
