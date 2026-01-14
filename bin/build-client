@@ -1,8 +1,17 @@
 #!/usr/bin/env php
 <?php
 
-$verbose  = in_array('-v', $argv) || in_array('--verbose', $argv);
-$services = array_values(array_filter(array_slice($argv, 1), fn($v) => !str_starts_with($v, '-')));
+$autoload = realpath($_composer_autoload_path ?? __DIR__ . '/../vendor/autoload.php');
+require_once $autoload;
+
+$basedir  = dirname($autoload, 2);
+$args     = array_slice($argv, 1);
+$verbose  = in_array('-v', $args) || in_array('--verbose', $args);
+$services = array_values(array_filter($args, fn($v) => !str_starts_with($v, '-')));
+
+foreach (\ryunosuke\Aws\Helper\ClientGenerator::generate($services) as $log) {
+    echo $log, "\n";
+}
 
 function buildChild(\DOMElement $parent, $xpathes)
 {
@@ -56,14 +65,8 @@ function each_files($dirname, $callback)
     }
 }
 
-foreach ([__DIR__ . '/../', __DIR__ . '/../../../../'] as $dir) {
-    if (file_exists("$dir/vendor/autoload.php")) {
-        $BASEDIR = realpath($dir);
-        break;
-    }
-}
-if (!isset($BASEDIR)) {
-    echo("failed to detect basedir.\n");
+if (!file_exists("$basedir/.idea")) {
+    echo("failed to detect .idea.\n");
     exit(1);
 }
 
@@ -71,7 +74,7 @@ $dom                     = new \DOMDocument();
 $dom->preserveWhiteSpace = false;
 $dom->formatOutput       = true;
 
-$miscXml = "$BASEDIR/.idea/misc.xml";
+$miscXml = "$basedir/.idea/misc.xml";
 if (!file_exists($miscXml)) {
     file_put_contents($miscXml, <<<XML
     <?xml version="1.0" encoding="UTF-8"?>
@@ -80,12 +83,12 @@ if (!file_exists($miscXml)) {
     </project>
     XML,);
 }
-(function ($filename) use ($verbose, $services, $dom, $BASEDIR) {
+(function ($filename) use ($verbose, $services, $dom, $basedir) {
     $dom->load($filename);
     $node = buildChild($dom->documentElement, 'component[@name="ProjectPlainTextFileTypeManager"]');
 
     $targets = array_fill_keys(removeChildren($node, 'url'), true);
-    $pathes  = each_files("$BASEDIR/vendor/aws/aws-sdk-php/src", function (\RecursiveDirectoryIterator $it) use ($services) {
+    $pathes  = each_files("$basedir/vendor/aws/aws-sdk-php/src", function (\RecursiveDirectoryIterator $it) use ($services) {
         $matches = !$services;
         foreach ($services as $service) {
             if (fnmatch($service, $it->getSubPath(), FNM_CASEFOLD)) {
