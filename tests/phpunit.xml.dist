@@ -1,0 +1,30 @@
+<phpunit bootstrap="bootstrap.php"
+         colors="true"
+         printerClass="\ryunosuke\PHPUnit\Printer\ProgressPrinter"
+         columns="120"
+>
+    <testsuites>
+        <testsuite name="tests">
+            <directory>./Test/</directory>
+        </testsuite>
+    </testsuites>
+
+    <php>
+        <env name="AWS_REGION" value="ap-northeast-1"/>
+        <env name="AWS_ACCESS_KEY_ID" value="test"/>
+        <env name="AWS_SECRET_ACCESS_KEY" value="test"/>
+        <env name="AWS_ENDPOINT_URL" value="http://localhost:4566"/>
+
+        <env name="TEST_BUCKET" value="test-bucket"/>
+        <env name="TEST_BUCKET2" value="test-bucket2"/>
+    </php>
+
+    <coverage>
+        <include>
+            <directory suffix=".php">../src/Aws/Helper</directory>
+        </include>
+        <exclude>
+            <file>../src/Aws/Helper/ClientGenerator.php</file>
+        </exclude>
+    </coverage>
+</phpunit>

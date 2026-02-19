@@ -1,7 +1,7 @@
 {
   "config": {
     "platform": {
-      "php": "8.0"
+      "php": "8.2"
     }
   },
   "name": "ryunosuke/aws-sdk-helper",
@@ -15,10 +15,12 @@
     }
   ],
   "require": {
-    "php": ">=8.0"
+    "php": ">=8.2"
   },
   "require-dev": {
-    "aws/aws-sdk-php": "3.*"
+    "aws/aws-sdk-php": "3.*",
+    "phpunit/phpunit": "9.*",
+    "ryunosuke/phpunit-extension": "3.*"
   },
   "autoload": {
     "psr-4": {
@@ -32,5 +34,13 @@
   },
   "bin": [
     "bin/build-client"
-  ]
+  ],
+  "scripts": {
+    "build": [
+      "@test"
+    ],
+    "test": [
+      "php vendor/bin/phpunit --configuration=tests/phpunit.xml"
+    ]
+  }
 }
