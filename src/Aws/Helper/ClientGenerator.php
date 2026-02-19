@@ -79,20 +79,31 @@ class ClientGenerator
                 }
             }
 
-            file_put_contents("$outputDirectory/{$manifest['namespace']}Client.php", <<<PHP
+            $nameSpace = "Aws\\{$manifest['namespace']}";
+            $className = "{$manifest['namespace']}Client";
+
+            $implements = [];
+            $uses       = [];
+            if (class_exists("$nameSpace\\$className")) {
+                $implements = array_map(fn($v) => "\\$v", class_implements("$nameSpace\\$className"));
+                $uses       = array_map(fn($v) => "\\$v", class_uses("$nameSpace\\$className"));
+            }
+
+            file_put_contents("$outputDirectory/$className.php", <<<PHP
                 <?php
-                namespace Aws\\{$manifest['namespace']};
+                namespace $nameSpace;
                 
                 /**
                 {$V(implode("\n", $shapes))}
                  */
-                class {$manifest['namespace']}Client extends \\Aws\\AwsClient
+                class $className extends \\Aws\\AwsClient{$V($implements ? " implements {$V(implode(', ', $implements))}" : "")}
                 {
+                {$V($uses ? "    use {$V(implode(', ', $uses))};\n" : "")}
                 {$V(implode("\n\n", $methods))}
                 }
 
                 PHP,);
-            yield "save " . ($classFile = realpath("$outputDirectory/{$manifest['namespace']}Client.php"));
+            yield "save " . ($classFile = realpath("$outputDirectory/$className.php"));
             unset($currents[$classFile]);
         }
 
