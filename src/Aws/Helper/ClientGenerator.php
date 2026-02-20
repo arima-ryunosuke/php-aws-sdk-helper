@@ -2,6 +2,7 @@
 namespace ryunosuke\Aws\Helper;
 
 use Generator;
+use ReflectionClass;
 use const JSON_UNESCAPED_SLASHES;
 use const JSON_UNESCAPED_UNICODE;
 
@@ -113,11 +114,55 @@ class ClientGenerator
         }
     }
 
-    private static function resolveShape(array $shapes, string $shapeId, int $nest = 0): ?string
+    public static function resolveType(string $className): array
+    {
+        $vendorDirectory = array_filter([__DIR__ . '/../../../vendor/', __DIR__ . '/../../../../../'], 'file_exists');
+        $dataDirectory   = reset($vendorDirectory) . '/aws/aws-sdk-php/src/data';
+
+        $manifests = [];
+        foreach (require "$dataDirectory/manifest.json.php" as $id => $manifest) {
+            $manifests[$manifest['namespace']] = array_merge(['id' => $id], $manifest);
+        }
+
+        $refclass = new ReflectionClass($className);
+        $filename = $refclass->getFileName();
+        $contents = file_get_contents($filename);
+
+        static $services = [];
+
+        $results = [];
+        preg_match_all('#@psalm-import-type\s+(.+?)\s+from\s+(.+)#m', $contents, $matches, PREG_SET_ORDER);
+        foreach ($matches as [, $type, $client]) {
+            [, $service] = explode('\\', trim($client, '\\'));
+
+            $services[$service] ??= (function () use ($manifests, $service, $dataDirectory) {
+                $manifest = $manifests[$service];
+                $id       = $manifest['id'];
+                $version  = $manifest['versions']['latest'];
+                $schema   = require $api2File = realpath("$dataDirectory/$id/$version/api-2.json.php");
+
+                return self::implodeArrayMap($schema['shapes'], function ($shape, $shapeId) use ($schema) {
+                    if (!in_array($shape['type'], ["map", "list", "structure"], true)) {
+                        return null;
+                    }
+                    $type = self::resolveShape($schema['shapes'], $shapeId, true);
+                    return strtr("$type", ["\n" => "\n * "]);
+                }, null);
+            })();
+
+            if (isset($services[$service][$type])) {
+                $results[$type] = $services[$service][$type];
+            }
+        }
+
+        return $results;
+    }
+
+    private static function resolveShape(array $shapes, string $shapeId, bool $deep = false, int $nest = 0): ?string
     {
         $shape = $shapes[$shapeId];
 
-        if ($nest > 0 && in_array($shape['type'], ["map", "list", "structure"], true)) {
+        if (!$deep && $nest > 0 && in_array($shape['type'], ["map", "list", "structure"], true)) {
             return $shapeId;
         }
 
@@ -141,13 +186,13 @@ class ClientGenerator
             "string"          => $enum ?? "string",
             "blob"            => $enum ?? "string|resource|\\Psr\\Http\\Message\\StreamInterface",
             "timestamp"       => $enum ?? "int|string|\\DateTimeInterface",
-            "map"             => $enum ?? "array<{$V(self::resolveShape($shapes, $shape['key']['shape'], $nest + 1))}, {$V(self::resolveShape($shapes, $shape['value']['shape'], $nest + 1))}>",
-            "list"            => $enum ?? "array|list<{$V(self::resolveShape($shapes, $shape['member']['shape'], $nest + 1))}>",
+            "map"             => $enum ?? "array<{$V(self::resolveShape($shapes, $shape['key']['shape'], $deep, $nest + 1))}, {$V(self::resolveShape($shapes, $shape['value']['shape'], $deep, $nest + 1))}>",
+            "list"            => $enum ?? "array|list<{$V(self::resolveShape($shapes, $shape['member']['shape'], $deep, $nest + 1))}>",
             "structure"       => $enum ?? "array{{$V(self::concatStrings(
                 "\n",
-                "{$V(self::implodeArrayMap($shape['members'], function ($v, $k) use ($V, $shapes, $shape, $nest, $indent1) {
+                "{$V(self::implodeArrayMap($shape['members'], function ($v, $k) use ($V, $shapes, $shape, $deep, $nest, $indent1) {
                     $required = in_array($k, $shape['required'] ?? [], true) ? '' : '?';
-                    return "$indent1{$k}{$required}: {$V(self::resolveShape($shapes, $v['shape'], $nest + 1))},";
+                    return "$indent1{$k}{$required}: {$V(self::resolveShape($shapes, $v['shape'], $deep, $nest + 1))},";
                 }, "\n"))}",
                 "\n{$indent0}",
             ))}}",
